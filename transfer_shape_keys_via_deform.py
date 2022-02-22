@@ -24,7 +24,7 @@ bl_info={
     "description": "Transfer shape keys from active to selected via deform modifier",
     "author" : "konoha18537007",
     "version" : (1, 1),
-    "blender": (2, 92, 0),
+    "blender": (3, 0, 0),
     "category": "Object",
     "location": "View3D > Object",
     #"wiki_url": "",
