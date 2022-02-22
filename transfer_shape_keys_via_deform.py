@@ -204,7 +204,12 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
     )
     mute_existing_mod: bpy.props.BoolProperty(
         name="Mute Existing Mod After Transfer",
-        description="Mute existing Surface Deform modifier after transfering shape keys (otherwise shape keys can't be viewed properly).",
+        description="Mute existing Surface Deform modifier after transfering shape keys (otherwise shape keys can't be viewed properly)",
+        default=True,
+    )
+    move_to_first:  bpy.props.BoolProperty(
+        name="Move to first",
+        description="Move temporary deform modifier to the top of the modifier list. This is necessary when there are unapplied generative modifiers, as they break shape keys",
         default=True,
     )
     falloff: bpy.props.FloatProperty(
@@ -261,10 +266,14 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
                 break
         return mod
 
-    def __add_and_bind_surface_deform_modifier(self, context, obj, target, falloff, strength, vg_name, vg_invert):
+    def __add_and_bind_surface_deform_modifier(self, context, obj, target, move_to_first, falloff, strength, vg_name, vg_invert):
         def_mod = None
         try:
+            context.view_layer.objects.active = obj
+            
             def_mod = obj.modifiers.new(type='SURFACE_DEFORM', name="TEMP_SurfaceDeform")
+            if move_to_first:
+                bpy.ops.object.modifier_move_to_index(modifier=def_mod.name, index=0)
             def_mod.target = target
             def_mod.falloff = falloff
             def_mod.strength = strength
@@ -272,7 +281,6 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
                 def_mod.vertex_group = vg_name
             def_mod.invert_vertex_group = vg_invert
             
-            context.view_layer.objects.active = obj
             bpy.ops.object.surfacedeform_bind(modifier = def_mod.name)
             context.view_layer.objects.active = target 
         except:
@@ -280,7 +288,7 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
         finally:
             return def_mod
         
-    def __get_surface_def_mod(self, context, use_existing_mod, obj, target, falloff, strength, vg_name, vg_invert):
+    def __get_surface_def_mod(self, context, use_existing_mod, obj, target, move_to_first, falloff, strength, vg_name, vg_invert):
         existing_mod_found = False
         def_mod = None
         if use_existing_mod:
@@ -288,12 +296,12 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
             if def_mod is not None:
                 existing_mod_found = True
         if def_mod is None:
-            def_mod = self.__add_and_bind_surface_deform_modifier(context, obj, target, falloff, strength, vg_name, vg_invert)
+            def_mod = self.__add_and_bind_surface_deform_modifier(context, obj, target, move_to_first, falloff, strength, vg_name, vg_invert)
         
         return def_mod, existing_mod_found
     
     
-    def process(self, context, use_existing_mod, mute_existing_mod, falloff, strength, vg_name, vg_invert,
+    def process(self, context, use_existing_mod, mute_existing_mod, move_to_first, falloff, strength, vg_name, vg_invert,
                 add_drivers, ignore_muted, suppress, overwrite):
                     
         ret = True
@@ -317,7 +325,7 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
             stored_tgt_settings = self.store_shape_key_settings(context, o)
             if suppress: self.mute_all_shape_keys(context, o)
             def_mod, existing_mod_found = self.__get_surface_def_mod(context, use_existing_mod, o, obj_src, 
-                                                                     falloff, strength, vg_name, vg_invert)
+                                                                     move_to_first, falloff, strength, vg_name, vg_invert)
 
             self.debug("modifier name: {0}".format(def_mod.name))
             
@@ -353,7 +361,8 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
         vg_enum_callback(context)
         vg_n = None if self.vg_name == 'NONE' else self.vg_name[:-3]
         
-        self.process(context, self.use_existing_mod, self.mute_existing_mod, self.falloff, self.strength, vg_n, self.vg_invert,
+        self.process(context, self.use_existing_mod, self.mute_existing_mod, 
+                     self.move_to_first, self.falloff, self.strength, vg_n, self.vg_invert,
                      self.add_drivers, self.ignore_muted, self.suppress, self.overwrite)
         
         return {'FINISHED'}
@@ -371,6 +380,7 @@ class TransferShapeKeysViaSurfaceDeform(TransferShapeKeys):
         
         layout.label(text = "Fallback Surface Deform Settings")
         def_box = layout.box()
+        def_box.prop(self, "move_to_first")
         def_box.prop(self, "falloff")
         def_box.prop(self, "strength")
         vg_row = def_box.row()
@@ -406,6 +416,11 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
     mute_existing_mod: bpy.props.BoolProperty(
         name="Mute After Transfer",
         description="Mute existing Surface Deform modifier after transfering shape keys (otherwise shape keys can't be viewed properly).",
+        default=True,
+    )
+    move_to_first:  bpy.props.BoolProperty(
+        name="Move to first",
+        description="Move temporary deform modifier to the top of the modifier list. This is necessary when there are unapplied generative modifiers, as they break shape keys",
         default=True,
     )
     precision: bpy.props.IntProperty(
@@ -492,17 +507,20 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
                 break
         return mod
 
-    def __add_and_bind_mesh_deform_modifier(self, context, obj, target, precision, vg_name, vg_invert):
+    def __add_and_bind_mesh_deform_modifier(self, context, obj, target, move_to_first, precision, vg_name, vg_invert):
         def_mod = None
         try:
+            context.view_layer.objects.active = obj
+            
             def_mod = obj.modifiers.new(type='MESH_DEFORM', name='TEMP_MeshDeform')
+            if move_to_first:
+                bpy.ops.object.modifier_move_to_index(modifier=def_mod.name, index=0)
             def_mod.object = target
             def_mod.precision = precision
             if vg_name:
                 def_mod.vertex_group = vg_name
             def_mod.invert_vertex_group = vg_invert
             
-            context.view_layer.objects.active = obj
             bpy.ops.object.meshdeform_bind(modifier=def_mod.name)
             context.view_layer.objects.active = target 
         except:
@@ -510,7 +528,7 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
         finally:
             return def_mod
         
-    def __get_mesh_def_mod(self, context, use_existing_mod, obj, target, precision, vg_name, vg_invert):
+    def __get_mesh_def_mod(self, context, use_existing_mod, obj, target, move_to_first, precision, vg_name, vg_invert):
         existing_mod_found = False
         def_mod = None
         if use_existing_mod:
@@ -518,12 +536,12 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
             if def_mod is not None:
                 existing_mod_found = True
         if def_mod is None:
-            def_mod = self.__add_and_bind_mesh_deform_modifier(context, obj, target, precision, vg_name, vg_invert)
+            def_mod = self.__add_and_bind_mesh_deform_modifier(context, obj, target, move_to_first, precision, vg_name, vg_invert)
         
         return def_mod, existing_mod_found
     
     
-    def process(self, context, use_existing_mod, mute_existing_mod, precision, vg_name, vg_invert, 
+    def process(self, context, use_existing_mod, mute_existing_mod, move_to_first, precision, vg_name, vg_invert, 
                 add_drivers, ignore_muted, suppress, overwrite, use_sld_mod, sld_thickness, sld_offset):
     
         ret = True
@@ -549,7 +567,7 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
             stored_tgt_settings = self.store_shape_key_settings(context, o)
             if suppress: self.mute_all_shape_keys(context, o)
             def_mod, existing_mod_found = self.__get_mesh_def_mod(context, use_existing_mod, o, obj_src,
-                                                                  precision, vg_name, vg_invert)
+                                                                  move_to_first, precision, vg_name, vg_invert)
             
             if existing_mod_found and sld_mod: sld_mod.show_viewport = False
             self.debug("modifier name: {0}".format(def_mod.name))
@@ -587,9 +605,10 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
         vg_enum_callback(context)
         vg_n = None if self.vg_name == 'NONE' else self.vg_name[:-3]
         
-        self.process(context, self.use_existing_mod, self.mute_existing_mod, self.precision, vg_n, self.vg_invert,
-                       self.add_drivers, self.ignore_muted, self.suppress, self.overwrite,
-                       self.use_sld_mod, self.sld_thickness, self.sld_offset)
+        self.process(context, self.use_existing_mod, self.mute_existing_mod,
+                     self.move_to_first, self.precision, vg_n, self.vg_invert,
+                     self.add_drivers, self.ignore_muted, self.suppress, self.overwrite,
+                     self.use_sld_mod, self.sld_thickness, self.sld_offset)
         
         return {'FINISHED'}
     
@@ -606,6 +625,7 @@ class TransferShapeKeysViaMeshDeform(TransferShapeKeys):
         
         layout.label(text = "Fallback Mesh Deform Settings")
         def_box = layout.box()
+        def_box.prop(self, "move_to_first")
         def_box.prop(self, "precision")
         vg_row = def_box.row()
         vg_row.prop(self, "vg_name")
